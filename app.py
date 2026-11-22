@@ -3,7 +3,7 @@ import sqlite3
 import re
 
 from ollama import chat
-from schema_reader import get_database_schema
+from schema_reader import get_database_schema, get_database_tables
 
 app = Flask(__name__)
 
@@ -11,15 +11,11 @@ DATABASE = "database.db"
 MODEL = "qwen2.5-coder:3b"
 
 
-# ---------------- DATABASE CONNECTION ----------------
-
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
 
-
-# ---------------- AI SQL GENERATION ----------------
 
 def generate_sql(text):
     schema = get_database_schema()
@@ -33,25 +29,24 @@ def generate_sql(text):
             {
                 "role": "system",
                 "content": f"""
-You are QueryMate, an expert SQLite SQL query generator.
+You are QueryMate, a SQLite SQL query generator.
 
 Database schema:
 {schema}
 
-Your task:
-Convert the user's natural language question into a valid SQLite query.
+Convert the user's question into a valid SQLite query.
 
 Rules:
-1. Generate only SELECT queries.
-2. Use only tables and columns present in the schema.
-3. Do not invent tables or columns.
-4. Do not generate INSERT, UPDATE, DELETE, DROP, ALTER,
-   CREATE, ATTACH, DETACH, or PRAGMA statements.
-5. Use valid SQLite syntax.
-6. Return only the SQL query.
-7. Do not include markdown, explanations, or comments.
-8. If the question cannot be answered using the schema,
-   return SELECT 1 WHERE 0;
+- Generate only SELECT queries.
+- Use only tables and columns from the schema.
+- Do not invent tables or columns.
+- Do not generate INSERT, UPDATE, DELETE, DROP, ALTER,
+  CREATE, ATTACH, DETACH, or PRAGMA statements.
+- Use valid SQLite syntax.
+- Return only the SQL query.
+- Do not include markdown or explanations.
+- If the question cannot be answered using the schema,
+  return SELECT 1 WHERE 0;
 """
             },
             {
@@ -63,35 +58,30 @@ Rules:
 
     sql = response.message.content.strip()
 
-    # Remove markdown formatting if the model adds it
-    sql = re.sub(r"^```(?:sql)?\s*", "", sql, flags=re.IGNORECASE)
+    sql = re.sub(
+        r"^```(?:sql)?\s*",
+        "",
+        sql,
+        flags=re.IGNORECASE
+    )
+
     sql = re.sub(r"\s*```$", "", sql)
 
-    sql = sql.strip()
+    return sql.strip()
 
-    return sql
-
-
-# ---------------- SQL VALIDATION ----------------
 
 def validate_sql(sql):
     if not sql:
-        raise ValueError("The AI did not generate a query.")
+        raise ValueError("No query was generated.")
 
-    cleaned_sql = sql.strip()
+    sql = sql.strip().rstrip(";").strip()
 
-    # Remove trailing semicolon
-    cleaned_sql = cleaned_sql.rstrip(";").strip()
-
-    # Only SELECT or WITH queries are allowed
-    if not re.match(r"^(SELECT|WITH)\b", cleaned_sql, re.IGNORECASE):
+    if not re.match(r"^(SELECT|WITH)\b", sql, re.IGNORECASE):
         raise ValueError("Only SELECT queries are allowed.")
 
-    # Block multiple SQL statements
-    if ";" in cleaned_sql:
-        raise ValueError("Multiple SQL statements are not allowed.")
+    if ";" in sql:
+        raise ValueError("Multiple queries are not allowed.")
 
-    # Block dangerous SQL operations
     forbidden = [
         "INSERT",
         "UPDATE",
@@ -106,28 +96,24 @@ def validate_sql(sql):
         "VACUUM"
     ]
 
-    for keyword in forbidden:
-        pattern = r"\b" + keyword + r"\b"
+    for word in forbidden:
+        pattern = r"\b" + word + r"\b"
 
-        if re.search(pattern, cleaned_sql, re.IGNORECASE):
-            raise ValueError("Unsafe SQL query detected.")
+        if re.search(pattern, sql, re.IGNORECASE):
+            raise ValueError("Unsafe query.")
 
-    return cleaned_sql
+    return sql
 
-
-# ---------------- SQL EXECUTION ----------------
 
 def execute_sql(sql):
-    validated_sql = validate_sql(sql)
+    sql = validate_sql(sql)
 
     conn = get_db_connection()
 
     try:
-        # Enforce read-only mode at SQLite level
         conn.execute("PRAGMA query_only = ON")
 
-        cursor = conn.execute(validated_sql)
-
+        cursor = conn.execute(sql)
         rows = [dict(row) for row in cursor.fetchall()]
 
         return rows
@@ -136,11 +122,26 @@ def execute_sql(sql):
         conn.close()
 
 
-# ---------------- FLASK ROUTES ----------------
-
 @app.route("/")
 def home():
     return render_template("index.html")
+
+
+@app.route("/schema", methods=["GET"])
+def get_schema():
+    try:
+        tables = get_database_tables()
+
+        return jsonify({
+            "tables": tables
+        })
+
+    except Exception:
+        app.logger.exception("Could not load schema")
+
+        return jsonify({
+            "error": "Could not retrieve database schema."
+        }), 500
 
 
 @app.route("/generate", methods=["POST"])
@@ -155,10 +156,7 @@ def generate():
         }), 400
 
     try:
-        # Generate SQL using local AI
         sql = generate_sql(user_query)
-
-        # Validate and execute SQL
         rows = execute_sql(sql)
 
         return jsonify({
@@ -167,14 +165,12 @@ def generate():
         })
 
     except Exception:
-        app.logger.exception("Query generation failed")
+        app.logger.exception("Query failed")
 
         return jsonify({
-            "error": "Something went wrong while generating or executing the query."
+            "error": "Something went wrong while generating or running the query."
         }), 400
 
-
-# ---------------- APPLICATION START ----------------
 
 if __name__ == "__main__":
     app.run(

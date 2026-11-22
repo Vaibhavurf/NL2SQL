@@ -1,32 +1,291 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QueryMate</title>
-<link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SQL NL2SQL - Natural Language to SQL</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
 </head>
+
 <body>
 
-<div class="container">
-    <h1>QueryMate</h1>
-    <p>Convert Text to SQL Instantly</p>
+<div class="app-window">
 
-    <textarea id="queryInput" placeholder="Example: Show students with marks above 80"></textarea>
+    <!-- XP Title Bar -->
+    <header class="title-bar">
+        <div class="title-left">
+            <span>SQL NL2SQL - Natural Language to SQL</span>
+        </div>
+    </header>
 
-    <button onclick="generateSQL()">Generate SQL</button>
+    <!-- Menu Bar -->
+    <nav class="menu-bar">
+        <span>File</span>
+        <span>Edit</span>
+        <span>Database</span>
+        <span>Tools</span>
+        <span>Help</span>
+    </nav>
 
-    <div class="box">
-        <h3>Generated SQL</h3>
-        <pre id="sqlOutput"></pre>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <button onclick="newQuery()">📄 New Query</button>
+        <button onclick="generateSQL()">▶ Run Query</button>
+        <button onclick="clearQuery()">🧹 Clear</button>
+        <button onclick="showDatabaseInfo()">🗄 Database Info</button>
     </div>
 
-    <div class="box">
-        <h3>Results</h3>
-        <table id="resultTable"></table>
+    <!-- Main Workspace -->
+    <div class="workspace">
+
+        <!-- Database Explorer -->
+        <aside class="sidebar">
+
+            <div class="sidebar-header">
+                Database Explorer
+            </div>
+
+            <div class="sidebar-content">
+
+                <div class="database-name">
+                    <span>📁</span>
+                    <span>database.db</span>
+                </div>
+
+                <!-- Students Table -->
+                <div class="table-item">
+                    <span class="table-icon">📋</span>
+                    <strong>students</strong>
+                </div>
+
+                <div class="column-item">
+                    <span>🔑</span> id
+                </div>
+
+                <div class="column-item">
+                    <span>🔤</span> name
+                </div>
+
+                <div class="column-item">
+                    <span>🔢</span> age
+                </div>
+
+                <div class="column-item">
+                    <span>🔢</span> marks
+                </div>
+
+                <div class="column-item">
+                    <span>🔤</span> course
+                </div>
+
+                <!-- Employees Table -->
+                <div class="table-item">
+                    <span class="table-icon">📋</span>
+                    <strong>employees</strong>
+                </div>
+
+                <div class="column-item">
+                    <span>🔑</span> id
+                </div>
+
+                <div class="column-item">
+                    <span>🔤</span> name
+                </div>
+
+                <div class="column-item">
+                    <span>🔢</span> age
+                </div>
+
+                <div class="column-item">
+                    <span>🔤</span> department
+                </div>
+
+                <div class="column-item">
+                    <span>🔢</span> salary
+                </div>
+
+            </div>
+
+            <div class="sidebar-footer">
+                SQLite Database
+            </div>
+
+        </aside>
+
+        <!-- Main Panel -->
+        <main class="main-panel">
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <div class="tab active">
+                    📝 Query Editor
+                </div>
+
+                <div class="tab">
+                    📊 Schema
+                </div>
+            </div>
+
+            <!-- Query Editor -->
+            <section class="panel query-panel">
+
+                <div class="query-heading">
+                    Natural Language Query NL2SQL
+                </div>
+
+                <div class="panel-body">
+
+                    <label for="queryInput" class="query-label">
+                        Ask your database anything...
+                    </label>
+
+                    <textarea
+                        id="queryInput"
+                        placeholder="Ask your database anything...
+
+Example:
+Show students with marks above 80"
+                    ></textarea>
+
+                    <div class="query-actions">
+
+                        <span>
+                            Enter your question in natural language
+                        </span>
+
+                        <button
+                            id="generateButton"
+                            onclick="generateSQL()"
+                        >
+                            ▶ Generate SQL
+                        </button>
+
+                    </div>
+
+                    <!-- Example Queries -->
+                    <div class="examples-section">
+
+                        <div class="examples-title">
+                            Example Queries
+                        </div>
+
+                        <div class="examples">
+
+                            <button
+                                class="example-button"
+                                onclick="useExample('Show students with marks above 80')"
+                            >
+                                Marks above 80
+                            </button>
+
+                            <button
+                                class="example-button"
+                                onclick="useExample('Show the top 5 students by marks')"
+                            >
+                                Top students
+                            </button>
+
+                            <button
+                                class="example-button"
+                                onclick="useExample('Show employees with the highest salary')"
+                            >
+                                High salary
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- Loading -->
+            <div id="loading">
+                Generating SQL... Please wait.
+            </div>
+
+            <!-- Error -->
+            <div id="errorBox"></div>
+
+            <!-- Generated SQL -->
+            <section class="panel sql-panel">
+
+                <div class="panel-heading sql-heading">
+
+                    <strong>Generated SQL</strong>
+
+                    <button
+                        class="xp-button"
+                        onclick="copySQL()"
+                    >
+                        📄 Copy SQL
+                    </button>
+
+                </div>
+
+                <div class="sql-container">
+                    <pre id="sqlOutput">Your generated SQL will appear here.</pre>
+                </div>
+
+            </section>
+
+            <!-- Query Results -->
+            <section class="panel results-panel">
+
+                <div class="panel-heading results-header">
+
+                    <strong>Query Results</strong>
+
+                    <span id="resultCount">
+                        No results
+                    </span>
+
+                </div>
+
+                <div class="results-subheading">
+                    Results will appear here
+                </div>
+
+                <div class="table-wrapper">
+
+                    <table id="resultTable"></table>
+
+                </div>
+
+                <div class="results-footer">
+                    Run a query to view database records.
+                </div>
+
+            </section>
+
+        </main>
+
     </div>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+
+        <div class="status-left">
+            <span id="appStatus">Ready</span>
+        </div>
+
+        <div class="status-right">
+            <span>SQLite</span>
+            <span>Local AI</span>
+            <span>2 Tables</span>
+        </div>
+
+    </footer>
+
 </div>
 
-<script src="/static/script.js"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
 </body>
 </html>
